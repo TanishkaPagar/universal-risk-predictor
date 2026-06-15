@@ -3,17 +3,16 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from model import detect_target_column, train_on_any_dataset
-from predict import predict_bulk, predict_single, get_risk_label
+from model import train_model
+from predict import predict_single, predict_bulk
 from utils import generate_excel_report
 
 st.set_page_config(
-    page_title="Universal Risk Predictor",
-    page_icon="🤖",
+    page_title="Employee Burnout & Attrition Risk Predictor",
+    page_icon="👥",
     layout="wide"
 )
 
-# --- Custom CSS ---
 st.markdown("""
 <style>
     .main-title {
@@ -49,83 +48,168 @@ st.markdown("""
         font-size: 0.9rem;
         color: #000000;
     }
-    .info-box {
-        background: #e8f4fd;
-        border-radius: 10px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
-st.markdown('<div class="main-title">🤖 Universal Risk Predictor</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Upload ANY dataset → Auto-trains ML model → Predicts risk for every row</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">👥 Employee Burnout & Attrition Risk Predictor</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Universal HR Intelligence Tool — Works for any industry, any company</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ===================== STEP 1: UPLOAD & TRAIN =====================
-st.markdown("## Step 1 — Upload Your Dataset & Train Model")
-st.info("Upload any CSV dataset. The app will auto-detect the target column, preprocess data, and train an XGBoost model.")
+# ===================== TRAIN MODEL =====================
+@st.cache_resource
+def get_model():
+    import pandas as pd
+    df = pd.read_csv('WA_Fn-UseC_-HR-Employee-Attrition.csv')
+    return train_model(df, target_col='Attrition')
 
-uploaded_file = st.file_uploader("📂 Upload CSV Dataset", type=["csv"])
+with st.spinner("Loading AI model..."):
+    model_data = get_model()
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.success(f"✅ Dataset loaded — {df.shape[0]} rows, {df.shape[1]} columns")
+st.success(f"✅ Model Ready | Accuracy: {model_data['accuracy']*100:.1f}% | AUC: {model_data['auc']:.2f}")
+st.markdown("---")
 
-    with st.expander("👀 Preview Dataset"):
-        st.dataframe(df.head(10), use_container_width=True)
+tab1, tab2 = st.tabs(["🔍 Single Employee Prediction", "📂 Bulk Prediction (Upload CSV)"])
 
-    # Target column selection
-    suggested_target = detect_target_column(df)
-    target_col = st.selectbox(
-        "🎯 Select Target Column (what to predict)",
-        options=df.columns.tolist(),
-        index=df.columns.tolist().index(suggested_target)
-    )
+# ===================== TAB 1: SINGLE =====================
+with tab1:
+    st.subheader("Enter Employee Details")
+    st.info("Fill in the details below for any employee — works for any industry!")
 
-    st.write(f"**Target column:** `{target_col}` | **Unique values:** {df[target_col].nunique()} → {df[target_col].unique()[:5]}")
+    col1, col2, col3 = st.columns(3)
 
-    if st.button("🚀 Train Model on This Dataset", type="primary", use_container_width=True):
-        with st.spinner("Auto-preprocessing and training model... please wait"):
-            try:
-                model_data = train_on_any_dataset(df, target_col)
-                st.session_state['model_data'] = model_data
-                st.session_state['df'] = df
-                st.session_state['target_col'] = target_col
-                st.success("✅ Model trained successfully!")
+    with col1:
+        st.markdown("**👤 Personal Info**")
+        age = st.slider("Age", 18, 65, 30)
+        gender = st.selectbox("Gender", ["Male", "Female"])
+        marital_status = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
+        distance = st.slider("Distance from Home (km)", 1, 100, 10)
+        num_companies = st.slider("Number of Companies Worked At", 0, 20, 2)
 
-                # Show metrics
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Accuracy", f"{model_data['accuracy']*100:.1f}%")
-                m2.metric("ROC-AUC Score", f"{model_data['auc']:.4f}")
-                m3.metric("Features Used", len(model_data['features']))
+    with col2:
+        st.markdown("**💼 Job Info**")
+        department = st.text_input("Department", placeholder="e.g. Sales, Nursing, Teaching")
+        job_role = st.text_input("Job Role", placeholder="e.g. Manager, Doctor, Engineer")
+        job_level = st.selectbox("Job Level", [1, 2, 3, 4, 5],
+                                  format_func=lambda x: {1:"Entry",2:"Junior",3:"Mid",4:"Senior",5:"Executive"}[x])
+        business_travel = st.selectbox("Business Travel", ["Non-Travel", "Travel_Rarely", "Travel_Frequently"])
+        overtime = st.selectbox("Works Overtime?", ["Yes", "No"])
 
-                st.info(f"🎯 Predicting: **{target_col}** | Classes: {model_data['classes']}")
+    with col3:
+        st.markdown("**💰 Compensation & Experience**")
+        monthly_income = st.number_input("Monthly Income (₹/$)", 1000, 500000, 50000, step=1000)
+        percent_hike = st.slider("Salary Hike Last Year (%)", 0, 50, 10)
+        total_working_years = st.slider("Total Working Years", 0, 45, 8)
+        years_at_company = st.slider("Years at Current Company", 0, 45, 4)
+        years_in_role = st.slider("Years in Current Role", 0, 25, 3)
+        years_since_promo = st.slider("Years Since Last Promotion", 0, 20, 2)
 
-            except Exception as e:
-                st.error(f"Error during training: {str(e)}")
+    st.markdown("**⭐ Satisfaction Ratings**")
+    r1, r2, r3, r4, r5 = st.columns(5)
+    with r1:
+        job_satisfaction = st.slider("Job Satisfaction", 1, 4, 3)
+    with r2:
+        work_life_balance = st.slider("Work-Life Balance", 1, 4, 3)
+    with r3:
+        env_satisfaction = st.slider("Environment Satisfaction", 1, 4, 3)
+    with r4:
+        relationship_satisfaction = st.slider("Relationship Satisfaction", 1, 4, 3)
+    with r5:
+        job_involvement = st.slider("Job Involvement", 1, 4, 3)
 
-# ===================== STEP 2: PREDICT =====================
-if 'model_data' in st.session_state:
-    model_data = st.session_state['model_data']
-    df = st.session_state['df']
-    target_col = st.session_state['target_col']
+    training_times = st.slider("Training Sessions Last Year", 0, 10, 2)
 
-    st.markdown("---")
-    st.markdown("## Step 2 — Predict Risk")
+    if st.button("🔮 Predict Burnout & Attrition Risk", type="primary", use_container_width=True):
+        input_data = {
+            'Age': age,
+            'Gender': gender,
+            'MaritalStatus': marital_status,
+            'DistanceFromHome': distance,
+            'Department': department if department else 'Unknown',
+            'JobRole': job_role if job_role else 'Unknown',
+            'JobLevel': job_level,
+            'JobSatisfaction': job_satisfaction,
+            'OverTime': overtime,
+            'MonthlyIncome': monthly_income,
+            'PercentSalaryHike': percent_hike,
+            'TotalWorkingYears': total_working_years,
+            'YearsAtCompany': years_at_company,
+            'YearsInCurrentRole': years_in_role,
+            'YearsSinceLastPromotion': years_since_promo,
+            'WorkLifeBalance': work_life_balance,
+            'JobInvolvement': job_involvement,
+            'EnvironmentSatisfaction': env_satisfaction,
+            'RelationshipSatisfaction': relationship_satisfaction,
+            'NumCompaniesWorked': num_companies,
+            'TrainingTimesLastYear': training_times,
+            'BusinessTravel': business_travel
+        }
 
-    tab1, tab2 = st.tabs(["📂 Bulk Prediction (Full Dataset)", "🔍 Single Row Prediction"])
+        with st.spinner("Analyzing employee profile..."):
+            prob, risk_label, factors = predict_single(input_data, model_data)
 
-    # ===== TAB 1: BULK =====
-    with tab1:
-        st.subheader("Predict Risk for All Rows")
+        st.markdown("---")
+        col_res1, col_res2 = st.columns(2)
 
-        if st.button("🔮 Run Bulk Prediction", type="primary", use_container_width=True):
-            with st.spinner("Scoring all rows..."):
-                probs, labels = predict_bulk(df, model_data)
+        with col_res1:
+            color = "#00C851" if "Low" in risk_label else "#FFD700" if "Medium" in risk_label else "#FF4444"
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=round(prob * 100, 1),
+                title={'text': "Attrition Risk Score", 'font': {'size': 18}},
+                number={'suffix': "%", 'font': {'size': 36}},
+                gauge={
+                    'axis': {'range': [0, 100]},
+                    'bar': {'color': color},
+                    'steps': [
+                        {'range': [0, 30], 'color': '#d4edda'},
+                        {'range': [30, 60], 'color': '#fff3cd'},
+                        {'range': [60, 100], 'color': '#f8d7da'},
+                    ],
+                }
+            ))
+            fig.update_layout(height=300, margin=dict(t=40, b=10))
+            st.plotly_chart(fig, use_container_width=True)
 
-            df_result = df.copy()
+            risk_class = "low" if "Low" in risk_label else "medium" if "Medium" in risk_label else "high"
+            st.markdown(f'<div class="risk-card {risk_class}">{risk_label}</div>', unsafe_allow_html=True)
+
+        with col_res2:
+            st.markdown("#### 🔍 Top Factors Driving This Prediction")
+            st.markdown("*(SHAP-based explainability)*")
+            if factors:
+                for f in factors:
+                    direction = "⬆️ Increases risk" if f['impact'] > 0 else "⬇️ Decreases risk"
+                    st.markdown(
+                        f'<div class="factor-card"><b>{f["feature"]}</b>: {f["value"]:.1f} — {direction} '
+                        f'(impact: {f["impact"]:+.3f})</div>',
+                        unsafe_allow_html=True
+                    )
+
+            st.markdown("")
+            if "High" in risk_label:
+                st.error("⚠️ High Risk! Immediate retention action recommended.")
+            elif "Medium" in risk_label:
+                st.warning("👀 Medium Risk. Schedule a check-in with this employee.")
+            else:
+                st.success("✅ Low Risk. Employee appears stable and engaged.")
+
+# ===================== TAB 2: BULK =====================
+with tab2:
+    st.subheader("Bulk Employee Risk Analysis")
+    st.info("Upload a CSV with employee data. Columns should include: Age, Department, JobRole, JobSatisfaction, OverTime, MonthlyIncome, YearsAtCompany, WorkLifeBalance etc.")
+
+    uploaded = st.file_uploader("📂 Upload Employee CSV", type=["csv"])
+
+    if uploaded:
+        df_bulk = pd.read_csv(uploaded)
+        st.success(f"✅ Loaded {len(df_bulk)} employees")
+        st.dataframe(df_bulk.head(5), use_container_width=True)
+
+        if st.button("🚀 Run Bulk Risk Analysis", type="primary", use_container_width=True):
+            with st.spinner("Analyzing all employees..."):
+                probs, labels = predict_bulk(df_bulk, model_data)
+
+            df_result = df_bulk.copy()
             df_result['Risk Score (%)'] = (np.array(probs) * 100).round(1)
             df_result['Risk Level'] = labels
 
@@ -135,7 +219,7 @@ if 'model_data' in st.session_state:
             high = sum(1 for l in labels if "High" in l)
 
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Total Rows", len(labels))
+            m1.metric("Total Employees", len(labels))
             m2.metric("🟢 Low Risk", low)
             m3.metric("🟡 Medium Risk", med)
             m4.metric("🔴 High Risk", high)
@@ -166,92 +250,12 @@ if 'model_data' in st.session_state:
                 use_container_width=True
             )
 
-            excel_buf = generate_excel_report(df, probs, labels)
+            excel_buf = generate_excel_report(df_bulk, probs, labels)
             st.download_button(
                 label="📥 Download Excel Report",
                 data=excel_buf,
-                file_name="risk_report.xlsx",
+                file_name="burnout_risk_report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-
-    # ===== TAB 2: SINGLE =====
-    with tab2:
-        st.subheader("Predict Risk for a Single Entry")
-        st.info("Fill in values for each feature below")
-
-        features = model_data['features']
-        input_dict = {}
-        original_df = df.drop(columns=[target_col], errors='ignore')
-
-        cols = st.columns(3)
-        for i, feature in enumerate(features):
-            with cols[i % 3]:
-                if feature in original_df.columns:
-                    col_data = original_df[feature]
-                    if col_data.dtype == object:
-                        options = col_data.dropna().unique().tolist()
-                        input_dict[feature] = st.selectbox(f"{feature}", options)
-                    else:
-                        min_val = float(col_data.min())
-                        max_val = float(col_data.max())
-                        mean_val = float(col_data.mean())
-                        input_dict[feature] = st.slider(
-                            f"{feature}",
-                            min_value=min_val,
-                            max_value=max_val,
-                            value=mean_val
-                        )
-                else:
-                    input_dict[feature] = st.number_input(f"{feature}", value=0.0)
-
-        if st.button("🔮 Predict This Entry", type="primary", use_container_width=True):
-            with st.spinner("Analyzing..."):
-                prob, risk_label, factors = predict_single(input_dict, model_data)
-
-            st.markdown("---")
-            col_res1, col_res2 = st.columns(2)
-
-            with col_res1:
-                color = "#00C851" if "Low" in risk_label else "#FFD700" if "Medium" in risk_label else "#FF4444"
-                fig = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=round(prob * 100, 1),
-                    title={'text': "Risk Score", 'font': {'size': 18}},
-                    number={'suffix': "%", 'font': {'size': 36}},
-                    gauge={
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': color},
-                        'steps': [
-                            {'range': [0, 30], 'color': '#d4edda'},
-                            {'range': [30, 60], 'color': '#fff3cd'},
-                            {'range': [60, 100], 'color': '#f8d7da'},
-                        ],
-                    }
-                ))
-                fig.update_layout(height=300, margin=dict(t=40, b=10))
-                st.plotly_chart(fig, use_container_width=True)
-
-                risk_class = "low" if "Low" in risk_label else "medium" if "Medium" in risk_label else "high"
-                st.markdown(f'<div class="risk-card {risk_class}">{risk_label}</div>', unsafe_allow_html=True)
-
-            with col_res2:
-                st.markdown("#### 🔍 Top Factors Driving This Prediction")
-                st.markdown("*(SHAP-based explainability)*")
-                if factors:
-                    for f in factors:
-                        direction = "⬆️ Increases risk" if f['impact'] > 0 else "⬇️ Decreases risk"
-                        st.markdown(
-                            f'<div class="factor-card"><b>{f["feature"]}</b>: {f["value"]:.2f} — {direction} '
-                            f'(impact: {f["impact"]:+.3f})</div>',
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.info("SHAP factors not available for this prediction.")
-
-                if "High" in risk_label:
-                    st.error("⚠️ High risk detected! Immediate attention recommended.")
-                elif "Medium" in risk_label:
-                    st.warning("👀 Medium risk. Monitor closely.")
-                else:
-                    st.success("✅ Low risk. Looking stable!")
+            

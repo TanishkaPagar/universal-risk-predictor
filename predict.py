@@ -5,70 +5,74 @@ import shap
 
 MODEL_PATH = 'model/universal_model.pkl'
 
+CATEGORICAL_COLS = [
+    'Gender', 'MaritalStatus', 'Department',
+    'JobRole', 'OverTime', 'BusinessTravel'
+]
+
 def load_model():
     with open(MODEL_PATH, 'rb') as f:
         return pickle.load(f)
 
 def preprocess_input(df, model_data):
-    """Preprocess any input dataframe using saved encoders"""
     df = df.copy()
     encoders = model_data['encoders']
-    drop_cols = model_data['drop_cols']
     features = model_data['features']
-
-    # Drop same cols as training
-    for col in drop_cols:
-        if col in df.columns:
-            df = df.drop(columns=[col])
-
-    # Drop target if present
-    target_col = model_data['target_col']
-    if target_col in df.columns:
-        df = df.drop(columns=[target_col])
 
     # Fill missing
     for col in df.columns:
-        if df[col].dtype == object:
+        try:
+            if df[col].dtype == object or str(df[col].dtype) == 'string':
+                df[col] = df[col].fillna(
+                    df[col].mode()[0] if not df[col].mode().empty else 'Unknown'
+                )
+            elif pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].fillna(df[col].median())
+            else:
+                df[col] = df[col].fillna('Unknown')
+        except:
             df[col] = df[col].fillna('Unknown')
-        else:
-            df[col] = df[col].fillna(df[col].median())
 
     # Encode categoricals
-    for col, le in encoders.items():
-        if col in df.columns:
+    for col in CATEGORICAL_COLS:
+        if col in df.columns and col in encoders:
+            le = encoders[col]
             df[col] = df[col].apply(
                 lambda x: le.transform([str(x)])[0]
                 if str(x) in le.classes_ else 0
             )
 
-    # Add missing features
+    # Add missing features as 0
     for col in features:
         if col not in df.columns:
             df[col] = 0
 
     return df[features]
 
-def predict_bulk(df_raw, model_data):
-    """Predict risk for entire dataframe"""
-    model = model_data['model']
-    features = model_data['features']
-
-    df = preprocess_input(df_raw, model_data)
-    probs = model.predict_proba(df)[:, 1]
-    labels = [get_risk_label(p) for p in probs]
-    return probs, labels
-
 def predict_single(input_dict, model_data):
-    """Predict risk for single row"""
     model = model_data['model']
     features = model_data['features']
-
     df = pd.DataFrame([input_dict])
     df = preprocess_input(df, model_data)
     prob = model.predict_proba(df)[0][1]
     label = get_risk_label(prob)
     factors = get_shap_factors(model, df, features)
     return prob, label, factors
+
+def predict_bulk(df_raw, model_data):
+    model = model_data['model']
+    features = model_data['features']
+
+    # Drop target if present
+    df = df_raw.copy()
+    for col in ['Attrition', 'attrition']:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
+    df = preprocess_input(df, model_data)
+    probs = model.predict_proba(df)[:, 1]
+    labels = [get_risk_label(p) for p in probs]
+    return probs, labels
 
 def get_risk_label(prob):
     if prob < 0.3:

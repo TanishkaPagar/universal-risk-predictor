@@ -8,33 +8,29 @@ from imblearn.over_sampling import SMOTE
 import pickle
 import os
 
-def detect_target_column(df):
-    priority_keywords = [
-        'attrition', 'churn', 'default', 'fraud', 'target',
-        'label', 'outcome', 'risk', 'leave', 'exit', 'status'
-    ]
-    cols_lower = {col.lower(): col for col in df.columns}
-    for keyword in priority_keywords:
-        for col_lower, col_original in cols_lower.items():
-            if keyword in col_lower:
-                return col_original
-    return df.columns[-1]
+UNIVERSAL_FEATURES = [
+    'Age', 'Gender', 'MaritalStatus', 'DistanceFromHome',
+    'Department', 'JobRole', 'JobLevel', 'JobSatisfaction',
+    'OverTime', 'MonthlyIncome', 'PercentSalaryHike',
+    'TotalWorkingYears', 'YearsAtCompany', 'YearsInCurrentRole',
+    'YearsSinceLastPromotion', 'WorkLifeBalance', 'JobInvolvement',
+    'EnvironmentSatisfaction', 'RelationshipSatisfaction',
+    'NumCompaniesWorked', 'TrainingTimesLastYear', 'BusinessTravel'
+]
 
-def auto_preprocess(df, target_col):
+CATEGORICAL_COLS = [
+    'Gender', 'MaritalStatus', 'Department',
+    'JobRole', 'OverTime', 'BusinessTravel'
+]
+
+def load_and_preprocess(df, target_col='Attrition'):
     df = df.copy()
 
-    # Drop useless columns
-    drop_cols = []
-    for col in df.columns:
-        if col == target_col:
-            continue
-        if df[col].nunique() <= 1:
-            drop_cols.append(col)
-        if df[col].nunique() == len(df) and df[col].dtype == object:
-            drop_cols.append(col)
-    df = df.drop(columns=drop_cols)
+    # Keep only available universal features
+    available = [f for f in UNIVERSAL_FEATURES if f in df.columns]
+    df = df[available + [target_col]]
 
-    # Fill missing values safely
+    # Fill missing values
     for col in df.columns:
         if col == target_col:
             continue
@@ -50,22 +46,21 @@ def auto_preprocess(df, target_col):
         except:
             df[col] = df[col].fillna('Unknown')
 
-    # Encode target column
-    target_encoder = LabelEncoder()
-    df[target_col] = target_encoder.fit_transform(df[target_col].astype(str))
+    # Encode target
+    df[target_col] = (df[target_col].astype(str).str.strip().str.lower() == 'yes').astype(int)
 
-    # Encode all remaining categorical columns
+    # Encode categoricals
     encoders = {}
-    cat_cols = df.select_dtypes(include='object').columns.tolist()
-    for col in cat_cols:
-        le = LabelEncoder()
-        df[col] = le.fit_transform(df[col].astype(str))
-        encoders[col] = le
+    for col in CATEGORICAL_COLS:
+        if col in df.columns:
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col].astype(str))
+            encoders[col] = le
 
-    return df, encoders, target_encoder, drop_cols
+    return df, encoders, available
 
-def train_on_any_dataset(df, target_col):
-    df_processed, encoders, target_encoder, drop_cols = auto_preprocess(df, target_col)
+def train_model(df, target_col='Attrition'):
+    df_processed, encoders, available_features = load_and_preprocess(df, target_col)
 
     X = df_processed.drop(columns=[target_col])
     y = df_processed[target_col]
@@ -74,7 +69,6 @@ def train_on_any_dataset(df, target_col):
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Apply SMOTE only if enough samples
     min_class = y_train.value_counts().min()
     if min_class >= 6:
         sm = SMOTE(random_state=42)
@@ -98,17 +92,15 @@ def train_on_any_dataset(df, target_col):
     model_data = {
         'model': model,
         'encoders': encoders,
-        'target_encoder': target_encoder,
         'features': list(X.columns),
-        'target_col': target_col,
-        'drop_cols': drop_cols,
+        'available_features': available_features,
         'accuracy': report['accuracy'],
-        'auc': auc,
-        'classes': list(target_encoder.classes_)
+        'auc': auc
     }
 
     os.makedirs('model', exist_ok=True)
     with open('model/universal_model.pkl', 'wb') as f:
         pickle.dump(model_data, f)
 
+    print(f"✅ Model trained! Accuracy: {report['accuracy']*100:.1f}% | AUC: {auc:.4f}")
     return model_data
