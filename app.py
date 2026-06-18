@@ -58,7 +58,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">👥 Employee Attrition Risk Predictor</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Powered by XGBoost + OneHotEncoding + SHAP Explainability | IBM HR Analytics Dataset</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Powered by XGBoost + OneHotEncoding + SHAP Explainability</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ===================== LOAD MODEL =====================
