@@ -35,8 +35,8 @@ An HR analytics tool that predicts employee attrition risk using Machine Learnin
 ### Steps
 
 1. Clone the repository
-git clone https://github.com/TanishkaPagar/universal-risk-predictor.git
-cd universal-risk-predictor
+git clone https://github.com/TanishkaPagar/employee-attrition-risk-predictor.git
+cd employee-attrition-risk-predictor
 
 2. Install dependencies
 pip install -r requirements.txt
