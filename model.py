@@ -1,10 +1,14 @@
+# -*- coding: utf-8 -*-
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     classification_report, roc_auc_score,
     average_precision_score, confusion_matrix,
@@ -12,7 +16,6 @@ from sklearn.metrics import (
 )
 from imblearn.over_sampling import SMOTE, ADASYN, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
-from imblearn.pipeline import Pipeline as ImbPipeline
 import pickle
 import os
 
@@ -34,7 +37,7 @@ CATEGORICAL_FEATURES = [
 DROP_COLS = ['EmployeeCount', 'EmployeeNumber', 'Over18', 'StandardHours']
 
 def load_data(path):
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, encoding='utf-8')
     df = df.drop(columns=[c for c in DROP_COLS if c in df.columns])
     df['Attrition'] = (df['Attrition'] == 'Yes').astype(int)
     return df
@@ -86,9 +89,8 @@ def compare_imbalance_methods(X_train, y_train):
         }
         print(f"{name}: F1={np.mean(f1_scores):.4f}, Recall={np.mean(recall_scores):.4f}")
 
-    # Pick best method by F1
     best_method = max(results, key=lambda x: results[x]['F1'])
-    print(f"\n✅ Best Method: {best_method}")
+    print(f"\nBest Method: {best_method}")
     return best_method, methods[best_method], results
 
 def train_model(data_path):
@@ -97,7 +99,6 @@ def train_model(data_path):
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df['Attrition']
 
-    # Preprocess
     preprocessor = build_preprocessor()
     X_processed = preprocessor.fit_transform(X)
 
@@ -108,7 +109,6 @@ def train_model(data_path):
     print("=== Comparing Imbalance Handling Methods ===")
     best_method_name, best_sampler, imbalance_results = compare_imbalance_methods(X_train, y_train)
 
-    # Apply best sampler
     if best_sampler is not None:
         try:
             X_train_res, y_train_res = best_sampler.fit_resample(X_train, y_train)
@@ -117,7 +117,6 @@ def train_model(data_path):
     else:
         X_train_res, y_train_res = X_train, y_train
 
-    # Train final model
     model = XGBClassifier(
         n_estimators=200,
         max_depth=4,
@@ -127,7 +126,6 @@ def train_model(data_path):
     )
     model.fit(X_train_res, y_train_res)
 
-    # Evaluate
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
@@ -140,7 +138,6 @@ def train_model(data_path):
     print(f"F1-Score:  {f1_score(y_test, y_pred):.4f}")
     print(f"\nConfusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
 
-    # Stratified Cross Validation
     print("\n=== Stratified 5-Fold Cross Validation ===")
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     cv_results = cross_validate(
@@ -149,16 +146,14 @@ def train_model(data_path):
         scoring=['f1', 'recall', 'precision', 'roc_auc'],
         return_train_score=False
     )
-    print(f"CV F1:        {cv_results['test_f1'].mean():.4f} ± {cv_results['test_f1'].std():.4f}")
-    print(f"CV Recall:    {cv_results['test_recall'].mean():.4f} ± {cv_results['test_recall'].std():.4f}")
-    print(f"CV Precision: {cv_results['test_precision'].mean():.4f} ± {cv_results['test_precision'].std():.4f}")
-    print(f"CV ROC-AUC:   {cv_results['test_roc_auc'].mean():.4f} ± {cv_results['test_roc_auc'].std():.4f}")
+    print(f"CV F1:        {cv_results['test_f1'].mean():.4f} +/- {cv_results['test_f1'].std():.4f}")
+    print(f"CV Recall:    {cv_results['test_recall'].mean():.4f} +/- {cv_results['test_recall'].std():.4f}")
+    print(f"CV Precision: {cv_results['test_precision'].mean():.4f} +/- {cv_results['test_precision'].std():.4f}")
+    print(f"CV ROC-AUC:   {cv_results['test_roc_auc'].mean():.4f} +/- {cv_results['test_roc_auc'].std():.4f}")
 
-    # Get feature names after OHE
     ohe_feature_names = preprocessor.named_transformers_['cat'].get_feature_names_out(CATEGORICAL_FEATURES).tolist()
     all_feature_names = NUMERIC_FEATURES + ohe_feature_names
 
-    # Save everything
     model_data = {
         'model': model,
         'preprocessor': preprocessor,
@@ -188,7 +183,7 @@ def train_model(data_path):
     with open('model/attrition_model.pkl', 'wb') as f:
         pickle.dump(model_data, f)
 
-    print("\n✅ Model saved to model/attrition_model.pkl")
+    print("\nModel saved to model/attrition_model.pkl")
     return model_data
 
 if __name__ == '__main__':
