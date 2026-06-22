@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import pickle
+import os
 from model import train_model
 from predict import predict_single, predict_bulk
 from utils import generate_excel_report
@@ -64,9 +66,13 @@ st.markdown("---")
 # ===================== LOAD MODEL =====================
 @st.cache_resource
 def get_model():
+    model_path = 'model/attrition_model.pkl'
+    if os.path.exists(model_path):
+        with open(model_path, 'rb') as f:
+            return pickle.load(f)
     return train_model('WA_Fn-UseC_-HR-Employee-Attrition.csv')
 
-with st.spinner("Loading and training model..."):
+with st.spinner("Loading model..."):
     model_data = get_model()
 
 # ===================== MODEL METRICS =====================
